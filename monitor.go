@@ -92,8 +92,9 @@ func main() {
 	scrapePort := GetVarOrDefault("SCRAPE_PORT", "9100")
 	interval := GetVarOrDefault("MONITOR_INTERVAL", "1000")
 	url := GetVarOrDefault("MONITOR_URL", "")
-	subsystem := GetVarOrDefault("SUBSYSTEM", "website")
-	componentName := GetVarOrDefault("COMPONENT_NAME", "simple_http_monitor_docker_hub")
+	namespace := GetVarOrDefault("PROMETHEUS_NAMESPACE", "monitoring")
+	subsystem := GetVarOrDefault("PROMETHEUS_SUBSYSTEM", "echo")
+	componentName := GetVarOrDefault("PROMETHEUS_COMPONENT_NAME", "simple_http_monitor_docker_hub")
 	egressIPs := GetSliceVarOrDefault("EGRESS_IPS", []string{})
 
 	// 1 Sec timeout for the EC2 info site (if it's not there, the default timeout is 30 sec...)
@@ -118,7 +119,7 @@ func main() {
 
 	// create and register a new `Summary` with Prometheus
 	var responseTimeSummary = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Namespace:   "monitoring",
+		Namespace:   namespace,
 		Subsystem:   subsystem,
 		Name:        componentName + "_load_time",
 		Help:        componentName + " Load Time",
@@ -133,7 +134,7 @@ func main() {
 	prometheus.Register(responseTimeSummary)
 	// create and register a new `Gauge` with prometheus for the response statuse
 	responseStatus := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace:   "monitoring",
+		Namespace:   namespace,
 		Subsystem:   subsystem,
 		Name:        componentName + "_response_status",
 		Help:        componentName + " response HTTP status",
@@ -143,7 +144,7 @@ func main() {
 	)
 	// create and register a new `Counter` with prometheus for the errors
 	errorCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace:   "monitoring",
+		Namespace:   namespace,
 		Subsystem:   subsystem,
 		Name:        componentName + "_error",
 		Help:        componentName + " error",
@@ -157,7 +158,7 @@ func main() {
 	}
 	// create and register a new `Counter` with prometheus for wrong outbound IP
 	wrongOutboundIPCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace:   "monitoring",
+		Namespace:   namespace,
 		Subsystem:   subsystem,
 		Name:        componentName + "_wrong_outbound_ip",
 		Help:        componentName + " wrong outbound ip",
