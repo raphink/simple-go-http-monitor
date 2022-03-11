@@ -15,7 +15,10 @@ import (
 )
 
 // The monitoring loop
-func monitorWebsite(loadTime prometheus.Summary, responseStatus prometheus.Gauge, url string, interval int) {
+func monitorWebsite(
+	loadTime prometheus.Summary, responseStatus prometheus.Gauge, errorCounter prometheus.Counter,
+	url string, interval int,
+) {
 	go func() {
 		for {
 			now := time.Now()
@@ -23,7 +26,8 @@ func monitorWebsite(loadTime prometheus.Summary, responseStatus prometheus.Gauge
 			get, err := http.Get(url)
 			if err != nil {
 				log.Error(err)
-				time.Sleep(time.Duration(interval) * time.Second)
+				errorCounter.Inc()
+				time.Sleep(time.Duration(interval) * time.Millisecond)
 				continue
 			}
 			elapsed := time.Since(now).Seconds()
@@ -106,14 +110,22 @@ func main() {
 		Help:        componentName + " response HTTP status",
 		ConstLabels: prometheus.Labels{"from": from},
 	})
-	err = prometheus.Register(responseStatus)
+	// create and register a new `Counter` with prometheus for the errors
+	errorCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace:   "monitoring",
+		Subsystem:   subsystem,
+		Name:        componentName + "_error",
+		Help:        componentName + " error",
+		ConstLabels: prometheus.Labels{"from": from},
+	})
+	err = prometheus.Register(errorCounter)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// Start the monitoring loop
 	log.Infof("Starting to to monitor [%s], interval [%s]\n", url, interval)
 	intervalStr, err := strconv.Atoi(interval)
-	monitorWebsite(responseTimeSummary, responseStatus, url, intervalStr)
+	monitorWebsite(responseTimeSummary, responseStatus, errorCounter, url, intervalStr)
 
 	// Start the server, and set the /metrics endpoint to be served by the promhttp package
 	log.Infof("Starting to serve metrics on port [%s]\n", scrapePort)
