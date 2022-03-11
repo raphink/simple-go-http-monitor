@@ -91,7 +91,7 @@ func main() {
 	from := ""
 	scrapePort := GetVarOrDefault("SCRAPE_PORT", "9100")
 	interval := GetVarOrDefault("MONITOR_INTERVAL", "1000")
-	url := GetVarOrDefault("MONITOR_URL", "https://hub.docker.com/repository/docker/tomgurdev/simple-go-http-monitor")
+	url := GetVarOrDefault("MONITOR_URL", "")
 	subsystem := GetVarOrDefault("SUBSYSTEM", "website")
 	componentName := GetVarOrDefault("COMPONENT_NAME", "simple_http_monitor_docker_hub")
 	egressIPs := GetSliceVarOrDefault("EGRESS_IPS", []string{})
