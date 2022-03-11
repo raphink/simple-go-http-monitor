@@ -59,11 +59,11 @@ func GetVarOrDefault(varName string, defaultValue string) string {
 
 func main() {
 	from := ""
-	scrapePort := GetVarOrDefault("scrapePort", "9100")
-	interval := GetVarOrDefault("monitorInterval", "10")
-	url := GetVarOrDefault("monitorUrl", "https://hub.docker.com/repository/docker/tomgurdev/simple-go-http-monitor")
-	subsystem := GetVarOrDefault("subsystem", "website")
-	componentName := GetVarOrDefault("componentName", "simple_http_monitor_docker_hub")
+	scrapePort := GetVarOrDefault("SCRAPE_PORT", "9100")
+	interval := GetVarOrDefault("MONITOR_INTERVAL", "10")
+	url := GetVarOrDefault("MONITOR_URL", "https://hub.docker.com/repository/docker/tomgurdev/simple-go-http-monitor")
+	subsystem := GetVarOrDefault("SUBSYSTEM", "website")
+	componentName := GetVarOrDefault("COMPONENT_NAME", "simple_http_monitor_docker_hub")
 
 	// 1 Sec timeout for the EC2 info site (if it's not there, the default timeout is 30 sec...)
 	client := http.Client{
