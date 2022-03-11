@@ -94,7 +94,7 @@ func main() {
 	url := GetVarOrDefault("MONITOR_URL", "")
 	namespace := GetVarOrDefault("PROMETHEUS_NAMESPACE", "monitoring")
 	subsystem := GetVarOrDefault("PROMETHEUS_SUBSYSTEM", "echo")
-	componentName := GetVarOrDefault("PROMETHEUS_COMPONENT_NAME", "simple_http_monitor_docker_hub")
+	componentName := GetVarOrDefault("PROMETHEUS_COMPONENT_NAME", "http_monitor_egress_gw")
 	egressIPs := GetSliceVarOrDefault("EGRESS_IPS", []string{})
 
 	// 1 Sec timeout for the EC2 info site (if it's not there, the default timeout is 30 sec...)
