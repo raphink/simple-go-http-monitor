@@ -16,22 +16,22 @@ import (
 
 // The monitoring loop
 func monitorWebsite(
-	loadTime prometheus.Summary, responseStatus prometheus.Gauge, errorCounter prometheus.Counter,
+	loadTime prometheus.Summary, responseStatus prometheus.Gauge, errorCounter *prometheus.CounterVec,
 	url string, interval int,
 ) {
 	go func() {
 		for {
 			now := time.Now()
 			// Sends an HTTP GET to the website
-			get, err := http.Get(url)
+			resp, err := http.Get(url)
 			if err != nil {
 				log.Error(err)
-				errorCounter.Inc()
+				errorCounter.With(prometheus.Labels{"error": err.Error()}).Inc()
 				time.Sleep(time.Duration(interval) * time.Millisecond)
 				continue
 			}
 			elapsed := time.Since(now).Seconds()
-			status := get.StatusCode
+			status := resp.StatusCode
 			// Prints the status code and the elapsed time
 			log.Infof("Status: [%d] Load time [%f]\n", status, elapsed)
 			// Updates Prometheus with the elapsed time
@@ -111,13 +111,15 @@ func main() {
 		ConstLabels: prometheus.Labels{"from": from},
 	})
 	// create and register a new `Counter` with prometheus for the errors
-	errorCounter := prometheus.NewCounter(prometheus.CounterOpts{
+	errorCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace:   "monitoring",
 		Subsystem:   subsystem,
 		Name:        componentName + "_error",
 		Help:        componentName + " error",
 		ConstLabels: prometheus.Labels{"from": from},
-	})
+	},
+		[]string{"error"},
+	)
 	err = prometheus.Register(errorCounter)
 	if err != nil {
 		log.Fatal(err)
