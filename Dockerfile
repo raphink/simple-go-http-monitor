@@ -1,7 +1,10 @@
-FROM golang:1.12.0-alpine3.9
-RUN apk add --update --no-cache curl bash git
+FROM golang as build
 RUN mkdir /monitor
 ADD . /monitor
 WORKDIR /monitor
-RUN go build -o monitor .
-CMD ["/monitor/monitor"]
+RUN CGO_ENABLED=0 GOOS=linux go build -o monitor .
+
+
+FROM scratch
+COPY --from=build /monitor/monitor /monitor
+ENTRYPOINT ["/monitor"]
