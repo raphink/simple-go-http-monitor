@@ -1,14 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -22,18 +22,18 @@ func monitorWebsite(loadTime prometheus.Summary, responseStatus prometheus.Gauge
 			// Sends an HTTP GET to the website
 			get, err := http.Get(url)
 			if err != nil {
-				fmt.Printf("[ERR ]: %v\n", err)
+				log.Error(err)
 				time.Sleep(time.Duration(interval) * time.Second)
 				continue
 			}
 			elapsed := time.Since(now).Seconds()
 			status := get.StatusCode
 			// Prints the status code and the elapsed time
-			fmt.Printf("[INFO ] Status: [%d] Load time [%f]\n", status, elapsed)
+			log.Infof("Status: [%d] Load time [%f]\n", status, elapsed)
 			// Updates Prometheus with the elapsed time
 			loadTime.Observe(elapsed)
 			responseStatus.Set(float64(status))
-			time.Sleep(time.Duration(interval) * time.Second)
+			time.Sleep(time.Duration(interval) * time.Millisecond)
 		}
 	}()
 }
@@ -52,7 +52,7 @@ func GetVarOrDefault(varName string, defaultValue string) string {
 	result := os.Getenv(varName)
 	if result == "" {
 		result = defaultValue
-		fmt.Printf("[INFO ] Environment Variable [%s] not set - setting supplied default [%s]\n", varName, result)
+		log.Infof("Environment Variable [%s] not set - setting supplied default [%s]\n", varName, result)
 	}
 	return result
 }
@@ -60,7 +60,7 @@ func GetVarOrDefault(varName string, defaultValue string) string {
 func main() {
 	from := ""
 	scrapePort := GetVarOrDefault("SCRAPE_PORT", "9100")
-	interval := GetVarOrDefault("MONITOR_INTERVAL", "10")
+	interval := GetVarOrDefault("MONITOR_INTERVAL", "1000")
 	url := GetVarOrDefault("MONITOR_URL", "https://hub.docker.com/repository/docker/tomgurdev/simple-go-http-monitor")
 	subsystem := GetVarOrDefault("SUBSYSTEM", "website")
 	componentName := GetVarOrDefault("COMPONENT_NAME", "simple_http_monitor_docker_hub")
@@ -74,9 +74,9 @@ func main() {
 	response, err := client.Get("http://169.254.169.254/latest/meta-data/placement/availability-zone")
 	// If the info site does not answer (not an EC2 instance, i.e. running on your laptop) set `from=UNKNOWN`
 	if err != nil {
-		fmt.Println("[WARN ] could not find AZ. Trying to find the local IP")
+		log.Warn("Could not find AZ. Trying to find the local IP")
 		localAddress := GetOutboundIP()
-		fmt.Printf("[INFO ] Found local IP address. Setting `from=%s`\n", localAddress)
+		log.Infof("Found local IP address. Setting `from=%s`\n", localAddress)
 		from = localAddress.String()
 	} else {
 		//if we got an answer from EC2 info site, and we know the AZ, set `from=AZ`
@@ -111,12 +111,12 @@ func main() {
 		log.Fatal(err)
 	}
 	// Start the monitoring loop
-	fmt.Printf("[INFO ] Starting to to monitor [%s], interval [%s]\n", url, interval)
+	log.Infof("Starting to to monitor [%s], interval [%s]\n", url, interval)
 	intervalStr, err := strconv.Atoi(interval)
 	monitorWebsite(responseTimeSummary, responseStatus, url, intervalStr)
 
 	// Start the server, and set the /metrics endpoint to be served by the promhttp package
-	fmt.Printf("[INFO ] Starting to serve metrics on port [%s]\n", scrapePort)
+	log.Infof("Starting to serve metrics on port [%s]\n", scrapePort)
 	http.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(":"+scrapePort, nil)
+	log.Fatal(http.ListenAndServe(":"+scrapePort, nil))
 }
