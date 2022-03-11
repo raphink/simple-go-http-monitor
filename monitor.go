@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -16,8 +17,8 @@ import (
 
 // The monitoring loop
 func monitorWebsite(
-	loadTime prometheus.Summary, responseStatus prometheus.Gauge, errorCounter *prometheus.CounterVec,
-	url string, interval int,
+	loadTime *prometheus.SummaryVec, responseStatus *prometheus.GaugeVec, errorCounter *prometheus.CounterVec, wrongOutboundIPCounter *prometheus.CounterVec,
+	url string, egressIPs []string, interval int,
 ) {
 	go func() {
 		for {
@@ -32,11 +33,31 @@ func monitorWebsite(
 			}
 			elapsed := time.Since(now).Seconds()
 			status := resp.StatusCode
-			// Prints the status code and the elapsed time
-			log.Infof("Status: [%d] Load time [%f]\n", status, elapsed)
+			defer resp.Body.Close()
+			bodyBytes, _ := ioutil.ReadAll(resp.Body)
+			outboundIP := string(bodyBytes)
+
 			// Updates Prometheus with the elapsed time
-			loadTime.Observe(elapsed)
-			responseStatus.Set(float64(status))
+			loadTime.With(prometheus.Labels{"outbound_ip": outboundIP}).Observe(elapsed)
+			responseStatus.With(prometheus.Labels{"outbound_ip": outboundIP}).Set(float64(status))
+
+			// Check if outboundIP is in egressIPs
+			var validIP bool
+			for _, ip := range egressIPs {
+				if outboundIP == ip {
+					validIP = true
+				}
+			}
+			if !validIP {
+				wrongOutboundIPCounter.With(prometheus.Labels{"outbound_ip": outboundIP}).Inc()
+			}
+
+			log.WithFields(log.Fields{
+				"outbound_ip":       outboundIP,
+				"status":            status,
+				"load_time":         elapsed,
+				"wrong_outbound_ip": !validIP,
+			}).Info("Got IP adress")
 			time.Sleep(time.Duration(interval) * time.Millisecond)
 		}
 	}()
@@ -61,6 +82,11 @@ func GetVarOrDefault(varName string, defaultValue string) string {
 	return result
 }
 
+func GetSliceVarOrDefault(varName string, defaultValues []string) []string {
+	envVar := GetVarOrDefault(varName, strings.Join(defaultValues, ","))
+	return strings.Split(envVar, ",")
+}
+
 func main() {
 	from := ""
 	scrapePort := GetVarOrDefault("SCRAPE_PORT", "9100")
@@ -68,6 +94,7 @@ func main() {
 	url := GetVarOrDefault("MONITOR_URL", "https://hub.docker.com/repository/docker/tomgurdev/simple-go-http-monitor")
 	subsystem := GetVarOrDefault("SUBSYSTEM", "website")
 	componentName := GetVarOrDefault("COMPONENT_NAME", "simple_http_monitor_docker_hub")
+	egressIPs := GetSliceVarOrDefault("EGRESS_IPS", []string{})
 
 	// 1 Sec timeout for the EC2 info site (if it's not there, the default timeout is 30 sec...)
 	client := http.Client{
@@ -90,7 +117,7 @@ func main() {
 	}
 
 	// create and register a new `Summary` with Prometheus
-	var responseTimeSummary = prometheus.NewSummary(prometheus.SummaryOpts{
+	var responseTimeSummary = prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		Namespace:   "monitoring",
 		Subsystem:   subsystem,
 		Name:        componentName + "_load_time",
@@ -100,16 +127,20 @@ func main() {
 		MaxAge:      0,
 		AgeBuckets:  0,
 		BufCap:      0,
-	})
+	},
+		[]string{"outbound_ip"},
+	)
 	prometheus.Register(responseTimeSummary)
 	// create and register a new `Gauge` with prometheus for the response statuse
-	responseStatus := prometheus.NewGauge(prometheus.GaugeOpts{
+	responseStatus := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace:   "monitoring",
 		Subsystem:   subsystem,
 		Name:        componentName + "_response_status",
 		Help:        componentName + " response HTTP status",
 		ConstLabels: prometheus.Labels{"from": from},
-	})
+	},
+		[]string{"outbound_ip"},
+	)
 	// create and register a new `Counter` with prometheus for the errors
 	errorCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace:   "monitoring",
@@ -124,10 +155,24 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// create and register a new `Counter` with prometheus for wrong outbound IP
+	wrongOutboundIPCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace:   "monitoring",
+		Subsystem:   subsystem,
+		Name:        componentName + "_wrong_outbound_ip",
+		Help:        componentName + " wrong outbound ip",
+		ConstLabels: prometheus.Labels{"from": from},
+	},
+		[]string{"outbound_ip"},
+	)
+	err = prometheus.Register(wrongOutboundIPCounter)
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Start the monitoring loop
 	log.Infof("Starting to to monitor [%s], interval [%s]\n", url, interval)
 	intervalStr, err := strconv.Atoi(interval)
-	monitorWebsite(responseTimeSummary, responseStatus, errorCounter, url, intervalStr)
+	monitorWebsite(responseTimeSummary, responseStatus, errorCounter, wrongOutboundIPCounter, url, egressIPs, intervalStr)
 
 	// Start the server, and set the /metrics endpoint to be served by the promhttp package
 	log.Infof("Starting to serve metrics on port [%s]\n", scrapePort)
